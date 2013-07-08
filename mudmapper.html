@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html>
+<body style="background-color:white;">
+<head>
+<title>MUD Mapper</title>
+
+ 
+<script type="text/javascript">
+/*
+ * MUD Mapper
+ * Designed for mapping MUDs / Dungeons
+ *
+ * Written for HTML5 Canvas
+ * Based on Virtual Graph Paper by Garrett Bartley
+ * http://www.garrettbartley.com/graphpaper.html
+ *
+ */
+
+// Declare global variables
+var global;
+var actions;
+var canvas;
+var ctx;
+var shape;
+var toolset_coord;
+
+// Use Debugger.log(string) to print out log messages to console
+var Debugger = function () { };
+Debugger.log = function (message) {
+   try {
+      console.log(message);
+   } catch (exception) {
+      return;
+   }
+}
+
+// Called when everything is ready
+function BodyLoad() {
+	canvas = document.getElementById('canvas');
+	toolset_coord = document.getElementById('coord');
+	
+	// Set up the canvas context (ctx)
+	ctx = canvas.getContext('2d');
+	
+	// Set some canvas properties
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+	canvas.w = canvas.width;	// short-hand
+	canvas.h = canvas.height;	// short-hand
+	canvas.mousedown = false;
+		
+	// Update the coordinates in the toolset
+	toolset_coord.update = function(x,y) {
+		this.innerHTML = x+','+y;
+	}
+	
+	// Global variables object and associated functions
+	global = {
+		objects: [], 	
+		spacing: 20, 	// hardcoded to 20
+		color: 'Black', 
+		title: '',
+		selected: -1,	// currently selected object (-1 = none)
+
+		// Add a new object (square/line)
+		addObject: function(x1,y1,x2,y2,type) {
+			this.selected = this.objects.length;
+
+			this.objects[this.selected] = {
+				x1: x1,
+				y1: y1,
+				x2: x2,
+				y2: y2,
+				type: type,
+				color: 'Black', // Reset color and label when adding new object
+				label: ''
+			}
+
+			// Update the color and label values
+			document.getElementById('color').value = 'Black';
+			document.getElementById('label').value = '';
+			this.color = color;
+
+			actions.update();
+		},
+
+		// Remove the last added object
+		undoObject: function() {
+			this.objects.splice(this.objects.length-1,1);
+			this.selected = -1;
+		},
+
+		// Delete the selected object
+		deleteSelected: function() {
+			if (this.selected >= 0) {
+				this.objects.splice(this.selected,1);
+				this.selected = -1;
+			}
+		},
+
+		// Delete all objects
+		resetObjects: function() {
+			this.objects = [];
+			this.selected = -1;
+		},
+
+		// Find the square object (if any) at the provided point (x,y)
+		findSquareObject: function(x,y) {
+			found = -1;
+
+			for(var i=0;i<this.objects.length;i++) {
+				if(this.objects[i].type=='square') {
+					if (this.objects[i].x1 == x && this.objects[i].y1 == y) {
+						found = i;
+						break;
+					}
+				}
+			}
+
+			return found;
+		},
+
+		// Find the line object (if any) at the provided point (x,y).
+		// This is done by calculating the distance from the point to the line.
+		findLineObject: function(x,y) {
+			found = -1;
+
+			for(var i=0;i<this.objects.length;i++) {
+				if(this.objects[i].type=='line') {
+
+					// The distance calculation assumes an infinite line so
+					// we need to make sure the point is actually near our
+					// line
+					x1=0;x2=0;y1=0;y2=0;
+
+					if (this.objects[i].x1 <= this.objects[i].x2) {
+						x1 = this.objects[i].x1;
+						x2 = this.objects[i].x2;
+					} else {
+						x1 = this.objects[i].x2;
+						x2 = this.objects[i].x1;						
+					}
+
+					if (this.objects[i].y1 <= this.objects[i].y2) {
+						y1 = this.objects[i].y1;
+						y2 = this.objects[i].y2;
+					} else {
+						y1 = this.objects[i].y2;
+						y2 = this.objects[i].y1;						
+					}
+
+					if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+						dist = this.distanceToLine(this.objects[i].x1,
+							this.objects[i].y1,this.objects[i].x2,
+							this.objects[i].y2,x,y);
+						if (dist < (global.spacing / 2)) {
+							found = i;
+							break;
+						}
+					}
+				}
+			}
+
+			return found;			
+		},
+
+		// Distance from line (x1,y1,x2,y2) to a point (px,py)
+		// Code based on:
+		// http://developer.classpath.org/doc/java/awt/geom/Line2D-source.html
+		distanceToLine: function(x1,y1,x2,y2,px,py) {
+			pd2 = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+
+      		x = 0.0;
+      		y = 0.0;
+
+      		if (pd2 == 0) {
+          		// Points are coincident.
+          		x = x1;
+          		y = y2;
+        	} else {
+          		u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / pd2;
+          		x = x1 + (u * (x2 - x1));
+          		y = y1 + (u * (y2 - y1));
+        	}
+  
+ 			distSquared = (x - px) * (x - px) + (y - py) * (y - py);
+
+ 			return Math.sqrt(distSquared);
+    	},
+
+    	// User updated the color on the toolbar
+		updateColor: function(color) {
+			this.color = color;
+
+			if (this.selected >= 0) {
+				this.objects[this.selected].color = color;
+				actions.update();
+			}
+		},
+
+		// User updated the label on the toolbar.  This is only relevant if an
+		// object is selected.
+		updateLabel: function(label) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].label = label;
+				actions.update();
+			}
+		},
+
+		// Update the map title
+		updateTitle: function(title) {
+			this.title = title;
+			actions.update();
+		},
+
+		// Select the specified object.  Also update the global color and
+		// label values.
+		selectObject: function(o) {
+			this.selected = o;
+
+			this.color = this.objects[o].color;
+			document.getElementById('color').value = this.objects[o].color;
+			document.getElementById('label').value = this.objects[o].label;
+
+			actions.update();
+		}
+	}
+
+	// UI actions
+	actions = {
+		// Redraw the whole page
+		update: function() {
+			canvas.redraw();
+			this.restore();
+		},
+
+		// Redraw all the objects.
+		restore: function() {
+			// Draw lines first
+			for(var i=0;i<global.objects.length;i++) {
+				if(global.objects[i].type=='line') {
+					if (i == global.selected) {
+						// Highlight the selected line
+						shape.highlightLine(global.objects[i].x1,
+							global.objects[i].y1,global.objects[i].x2,
+							global.objects[i].y2);
+					}
+
+					shape.draw(global.objects[i].x1,global.objects[i].y1,
+						global.objects[i].x2,global.objects[i].y2,
+						global.objects[i].type,global.objects[i].color,
+						global.objects[i].label);
+				}
+			}
+
+			// Then draw squares
+			for(var i=0;i<global.objects.length;i++) {
+				if(global.objects[i].type=='square') {
+					if (i == global.selected) {
+						// Highlight the selected square
+						shape.highlightSquare(global.objects[i].x1,
+							global.objects[i].y1);
+					}
+
+					shape.draw(global.objects[i].x1,global.objects[i].y1,
+						global.objects[i].x2,global.objects[i].y2,
+						global.objects[i].type,global.objects[i].color,
+						global.objects[i].label);
+				}
+			}
+
+			// Finally, write the title
+			if (global.title != undefined) {
+				ctx.fillStyle = 'black';
+				ctx.textAlign = 'left';
+				ctx.textBaseline = 'top';
+				ctx.font="bold 18px Arial";
+				ctx.fillText(global.title,5,5);
+			}
+		},
+
+		// Remove the last drawn object
+		undo: function() {
+			global.undoObject();
+			this.update();
+		},
+
+		// Removed the selected object
+		delete: function() {
+			global.deleteSelected();
+			this.update();
+		},
+
+		// Clear all the objects
+		clear: function() {
+			global.resetObjects();
+			this.update();
+		},
+
+		// Export to PNG
+		png: function() {
+			// Remove the highlighted object first
+			global.selected = -1;
+			this.update();
+
+			window.open(canvas.toDataURL('image/png'), 'Save as PNG');
+		}
+	}
+
+	// Shape drawing functions
+	shape = {
+		x: 0, y: 0,
+
+		// Called on mouse down event
+		init: function(x,y) {
+			this.x = this.squareCoord(x);
+			this.y = this.squareCoord(y);
+		},
+
+		// Called on mouse up event
+		done: function(x,y) {
+			x2 = this.squareCoord(x);
+			y2 = this.squareCoord(y);
+
+			if (x2 == this.x && y2 == this.y) {
+				// Mouse didn't move.  Either draw a square or select an
+				// object.
+				o = global.findSquareObject(x2,y2);
+				if (o < 0) {
+					o = global.findLineObject(this.lineCoord(x),
+							this.lineCoord(y));
+				}
+
+				if (o < 0) {
+					global.addObject(this.x,this.y,0,0,'square');
+				} else {
+					global.selectObject(o);
+				}
+			} else {
+				// Mouse moved.  Draw line.
+				global.addObject(this.lineCoord(this.x),this.lineCoord(this.y),
+					this.lineCoord(x2),this.lineCoord(y2),'line');
+			}
+		},
+
+		// Draw the specified shape
+		draw: function(x1,y1,x2,y2,type,color,label) {
+			if(color==undefined)
+			{
+				ctx.fillStyle = global.color;
+				ctx.strokeStyle = global.color;
+			} else {
+				ctx.fillStyle = color;
+				ctx.strokeStyle = color;
+			}
+
+			if (type == 'square') {
+				ctx.fillRect(x1,y1,global.spacing,global.spacing);
+
+				if (label != undefined) {
+					ctx.fillStyle = 'white'
+					ctx.textAlign = 'center';
+					ctx.textBaseline = 'middle';
+					ctx.font="bold 14px Arial";
+					ctx.fillText(label,x1+global.spacing/2,y1+global.spacing/2,
+						global.spacing);
+				}
+			} else if (type == 'line') {
+      			ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo(x1,y1);
+				ctx.lineTo(x2,y2);
+				ctx.closePath();
+				ctx.stroke();
+
+				if (label != undefined) {
+					x = x1+((x2-x1)/2);
+					y = y1+((y2-y1)/2);
+
+					if (y1 == y2) {
+						// Horizontal line
+						y = y - 1;
+						ctx.textAlign = 'center';
+						ctx.textBaseline = 'bottom';
+					} else if (x1 == x2) {
+						// Vertical line
+						x = x + 2;
+						ctx.textAlign = 'left';
+						ctx.textBaseline = 'middle';						
+					} else {
+						// Diagonal line
+						x = x + 6;
+						ctx.textAlign = 'left';
+						ctx.textBaseline = 'middle';						
+					}
+
+					ctx.fillStyle = 'black'
+					ctx.font="bold 14px Arial";
+					ctx.fillText(label,x,y);
+				}
+			}
+		},
+
+		// Draw a guide line
+		guide: function(x,y) {
+			actions.update();
+			this.draw(this.lineCoord(this.x),this.lineCoord(this.y),
+				this.lineCoord(x),this.lineCoord(y),'line');
+		},
+
+		// Highlight square
+		highlightSquare: function(x,y) {
+      		ctx.lineWidth = 4;
+      		ctx.strokeStyle = 'yellow';
+
+      		ctx.beginPath();
+      		ctx.rect(x,y,global.spacing,global.spacing);
+      		ctx.stroke();
+		},
+
+		// Highlight line
+		highlightLine: function(x1,y1,x2,y2) {
+      		ctx.lineWidth = 4;
+      		ctx.strokeStyle = 'yellow';
+
+			ctx.beginPath();
+			ctx.moveTo(x1,y1);
+			ctx.lineTo(x2,y2);
+			ctx.closePath();
+			ctx.stroke();
+		},
+
+		// Top left corner of square on our graph paper
+		squareCoord: function(c) {
+			var coord = c - (c % global.spacing);
+			return coord;
+		},
+
+		// Center of square on our graph paper
+		lineCoord: function(c) {
+			var coord = this.squareCoord(c) + (global.spacing / 2);
+			return coord;
+		}
+	}
+	
+	// Clear out everything
+	canvas.clear = function() {
+		ctx.clearRect(0,0,this.width,this.height);
+	}
+
+	// Redraw everything
+	canvas.redraw = function() {		
+		this.clear();
+		
+		// Prepare to draw the grid
+		ctx.beginPath();
+		ctx.strokeStyle = 'lightblue';
+		ctx.lineWidth = 1;
+
+		// Vertical rule
+		for(var y=global.spacing;y<this.h;y=y+global.spacing) {
+			ctx.moveTo(0,y);
+			ctx.lineTo(this.w,y);
+		}
+
+		// Horizontal rule
+		for(var x=global.spacing;x<this.w;x=x+global.spacing) {
+			ctx.moveTo(x,0);
+			ctx.lineTo(x,this.h);
+		}
+
+		// Draw the grid
+		ctx.closePath();
+		ctx.stroke();
+		
+		// Restore any saved actions
+		actions.restore();
+	}
+
+
+	canvas.onmousemove = function(e) {
+		if(!e) var e = window.event;
+		
+		var x = e.clientX;
+		var y = e.clientY;
+		
+		// Update the coordinates
+		toolset_coord.update(x,y);
+		
+		// If we're drawing a line, show the guide line
+		if(this.mousedown)
+			shape.guide(x,y);
+	}
+
+
+	canvas.onmousedown = function(e) {
+		if(!e) var e = window.event;
+		
+		this.mousedown = true;
+		
+		var x = e.clientX;
+		var y = e.clientY;
+
+		shape.init(x,y);
+	}
+
+
+	canvas.onmouseup = function(e) {
+		if(!e) var e = window.event;
+
+		this.mousedown = false;
+		
+		var x = e.clientX;
+		var y = e.clientY;
+
+		shape.done(x,y);
+	}
+		
+	// Now that all functions and objects are set, draw the grid
+	canvas.redraw();
+}
+</script>
+
+<style type="text/css">
+body {
+	margin: 0;
+	overflow: hidden;	// No scrollbars, please
+}
+
+#canvas { z-index: 1; }
+
+#toolset {
+	z-index: 2;
+	position: absolute;
+	bottom: 10px;
+	right: 10px;
+	border: 1px solid #000;
+	background-color: #fff;
+	font-family: sans-serif;
+	font-size: 90%;
+	padding: 10px;
+}
+
+#toolset p {
+	margin: 0;
+	clear: both;
+	line-height: 2em;
+}
+
+#toolset p label {
+	font-weight: bold;
+	width: 7em;
+	float: left;
+	display: inline-block;
+}
+
+#toolset p select {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+#toolset p textarea {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+</style>
+</head>
+
+<body onload="BodyLoad()">
+
+<canvas id="canvas"></canvas>
+
+<div id="toolset">
+	<p>
+		<button onclick="actions.undo()">Undo</button>
+		<button onclick="actions.delete()">Delete</button>
+		<button onclick="actions.clear()">Clear</button>
+		<button onclick="actions.png()">Export</button>
+	</p>
+
+	<p>
+		<label>Coordinates</label>
+		<span id="coord">0,0</span>
+	</p>
+
+	<p>
+		<label>Color</label>
+		<select id="color" onchange="global.updateColor(this.value)">
+			<option selected>Black</option>
+			<option>Red</option>
+			<option>Orange</option>
+			<option>Green</option>
+			<option>Blue</option>
+			<option>Purple</option>
+		</select>
+	</p>
+
+	<p>
+		<label>Label</label>
+		<textarea id="label" onchange="global.updateLabel(this.value)" rows=1
+			cols=12>
+		</textarea>
+	</p>
+
+	<p>
+		<label>Title</label>
+		<textarea id="title" onchange="global.updateTitle(this.value)">
+		</textarea>
+	</p>
+</div>
+
+</body>
+</html>
