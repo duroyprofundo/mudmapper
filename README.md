@@ -12,7 +12,7 @@ interesting rooms/exits.
 
 This is a preliminary version.  All feedback greatly appreciated.  Things I'd
 still like to do:
-1. Save/load map data so that it can be further edited.
-2. Allow for descriptions on rooms/exits that would be included in the image
-3. Allow for larger graph paper that can be accessed by scrolling
-4. Mobile/touch screen support
+1. Save/load map data so that it can be further edited.  
+2. Allow for descriptions on rooms/exits that would be included in the image  
+3. Allow for larger graph paper that can be accessed by scrolling  
+4. Mobile/touch screen support  
