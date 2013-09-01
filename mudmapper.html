@@ -22,7 +22,6 @@ var actions;
 var canvas;
 var ctx;
 var shape;
-var toolset_coord;
 
 // Use Debugger.log(string) to print out log messages to console
 var Debugger = function () { };
@@ -37,8 +36,7 @@ Debugger.log = function (message) {
 // Called when everything is ready
 function BodyLoad() {
 	canvas = document.getElementById('canvas');
-	toolset_coord = document.getElementById('coord');
-	
+
 	// Set up the canvas context (ctx)
 	ctx = canvas.getContext('2d');
 	
@@ -49,18 +47,25 @@ function BodyLoad() {
 	canvas.h = canvas.height;	// short-hand
 	canvas.mousedown = false;
 		
-	// Update the coordinates in the toolset
-	toolset_coord.update = function(x,y) {
-		this.innerHTML = x+','+y;
-	}
-	
 	// Global variables object and associated functions
 	global = {
+		version: 1,
 		objects: [], 	
-		spacing: 20, 	// hardcoded to 20
+		spacing: 16,
 		color: 'Black', 
 		title: '',
 		selected: -1,	// currently selected object (-1 = none)
+		drawGraphPaper: true,
+
+		// Only convert the settings we want save to JSON
+		toJSON: function () {
+        	return {
+        		version: this.version,
+            	objects: this.objects,
+            	spacing: this.spacing,
+            	title: this.title
+        	}
+    	},
 
 		// Add a new object (square/line)
 		addObject: function(x1,y1,x2,y2,type) {
@@ -72,13 +77,17 @@ function BodyLoad() {
 				x2: x2,
 				y2: y2,
 				type: type,
-				color: 'Black', // Reset color and label when adding new object
-				label: ''
+				color: 'Black', // Reset color, label and subscript when adding new object
+				label: '',
+				sub: '',
+				subpos: 'middle'
 			}
 
 			// Update the color and label values
 			document.getElementById('color').value = 'Black';
 			document.getElementById('label').value = '';
+			document.getElementById('subscript').value = '';
+			document.getElementById('subscriptposition').value = 'middle';
 			this.color = color;
 
 			actions.update();
@@ -202,14 +211,30 @@ function BodyLoad() {
 		// object is selected.
 		updateLabel: function(label) {
 			if (this.selected >= 0) {
-				this.objects[this.selected].label = label;
+				this.objects[this.selected].label = label.trim();
+				actions.update();
+			}
+		},
+
+		// User updated the subscript on the toolbar.  This is only relevant
+		// if an object is selected.
+		updateSubscript: function(subscript) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].sub = subscript.trim();
+				actions.update();
+			}
+		},
+
+		updateSubscriptPosition: function(position) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].subpos = position;
 				actions.update();
 			}
 		},
 
 		// Update the map title
 		updateTitle: function(title) {
-			this.title = title;
+			this.title = title.trim();
 			actions.update();
 		},
 
@@ -221,6 +246,8 @@ function BodyLoad() {
 			this.color = this.objects[o].color;
 			document.getElementById('color').value = this.objects[o].color;
 			document.getElementById('label').value = this.objects[o].label;
+			document.getElementById('subscript').value = this.objects[o].sub;
+			document.getElementById('subscriptposition').value = this.objects[o].subpos;
 
 			actions.update();
 		}
@@ -241,15 +268,10 @@ function BodyLoad() {
 				if(global.objects[i].type=='line') {
 					if (i == global.selected) {
 						// Highlight the selected line
-						shape.highlightLine(global.objects[i].x1,
-							global.objects[i].y1,global.objects[i].x2,
-							global.objects[i].y2);
+						shape.highlight(global.objects[i]);
 					}
 
-					shape.draw(global.objects[i].x1,global.objects[i].y1,
-						global.objects[i].x2,global.objects[i].y2,
-						global.objects[i].type,global.objects[i].color,
-						global.objects[i].label);
+					shape.draw(global.objects[i]);
 				}
 			}
 
@@ -258,14 +280,10 @@ function BodyLoad() {
 				if(global.objects[i].type=='square') {
 					if (i == global.selected) {
 						// Highlight the selected square
-						shape.highlightSquare(global.objects[i].x1,
-							global.objects[i].y1);
+						shape.highlight(global.objects[i]);
 					}
 
-					shape.draw(global.objects[i].x1,global.objects[i].y1,
-						global.objects[i].x2,global.objects[i].y2,
-						global.objects[i].type,global.objects[i].color,
-						global.objects[i].label);
+					shape.draw(global.objects[i]);
 				}
 			}
 
@@ -294,6 +312,14 @@ function BodyLoad() {
 		// Clear all the objects
 		clear: function() {
 			global.resetObjects();
+/*
+			for(var y=global.spacing;y<canvas.h;y=y+global.spacing*2) {
+				for(var x=global.spacing;x<canvas.w;x=x+global.spacing*2) {
+					shape.init(x,y);
+					shape.done(x,y);
+				}
+			}
+*/
 			this.update();
 		},
 
@@ -301,10 +327,68 @@ function BodyLoad() {
 		png: function() {
 			// Remove the highlighted object first
 			global.selected = -1;
+			global.drawGraphPaper = false;
 			this.update();
 
 			window.open(canvas.toDataURL('image/png'), 'Save as PNG');
-		}
+
+			global.drawGraphPaper = true;
+			this.update();
+		},
+
+		// Save the map data to disk (in JSON format)
+		save: function() {
+			var textToWrite = JSON.stringify(global);
+			var textFileAsBlob = new Blob([textToWrite], {type:'text/plain'});
+
+			var downloadLink = document.createElement("a");
+
+			if (global.title != undefined && global.title != '') {
+				downloadLink.download = global.title + '.json';
+			} else {
+				downloadLink.download = 'mapper.json';
+			}
+
+			downloadLink.innerHTML = "Download File";
+			if (window.webkitURL != null)
+			{
+				// Chrome allows the link to be clicked
+				// without actually adding it to the DOM.
+				downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+			}
+			else
+			{
+				// Firefox requires the link to be added to the DOM
+				// before it can be clicked.
+				downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+				downloadLink.onclick = destroyClickedElement;
+				downloadLink.style.display = "none";
+				document.body.appendChild(downloadLink);
+			}
+
+			downloadLink.click();
+		},
+
+		// Load the map from disk
+		load: function(files) {
+    		var file = files[0];
+
+      		var fileReader = new FileReader();
+			fileReader.onload = function(fileLoadedEvent) 
+			{
+				var textFromFileLoaded = fileLoadedEvent.target.result;
+				var data = JSON.parse(textFromFileLoaded);
+
+				global.objects = data.objects;
+				global.spacing = data.spacing;
+
+				global.title = data.title;
+				document.getElementById('title').value = global.title;
+
+				actions.update();
+			};
+			fileReader.readAsText(file);
+ 		}
 	}
 
 	// Shape drawing functions
@@ -344,45 +428,53 @@ function BodyLoad() {
 		},
 
 		// Draw the specified shape
-		draw: function(x1,y1,x2,y2,type,color,label) {
-			if(color==undefined)
+		draw: function(obj) {
+			if(obj.color==undefined)
 			{
 				ctx.fillStyle = global.color;
 				ctx.strokeStyle = global.color;
 			} else {
-				ctx.fillStyle = color;
-				ctx.strokeStyle = color;
+				ctx.fillStyle = obj.color;
+				ctx.strokeStyle = obj.color;
 			}
 
-			if (type == 'square') {
-				ctx.fillRect(x1,y1,global.spacing,global.spacing);
+			if (obj.type == 'square') {
+				ctx.fillRect(obj.x1,obj.y1,global.spacing,global.spacing);
 
 				if (label != undefined) {
 					ctx.fillStyle = 'white'
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
 					ctx.font="bold 14px Arial";
-					ctx.fillText(label,x1+global.spacing/2,y1+global.spacing/2,
-						global.spacing);
+					ctx.fillText(obj.label,obj.x1+global.spacing/2,
+						obj.y1+global.spacing/2,global.spacing);
 				}
-			} else if (type == 'line') {
+
+				if (obj.sub != undefined) {
+					ctx.fillStyle = 'black'
+					ctx.textAlign = 'left';
+					ctx.textBaseline = obj.subpos;
+					ctx.font="9px Helvetica";
+					ctx.fillText(obj.sub,obj.x1+global.spacing,obj.y1);
+				}
+			} else if (obj.type == 'line') {
       			ctx.lineWidth = 2;
 				ctx.beginPath();
-				ctx.moveTo(x1,y1);
-				ctx.lineTo(x2,y2);
+				ctx.moveTo(obj.x1,obj.y1);
+				ctx.lineTo(obj.x2,obj.y2);
 				ctx.closePath();
 				ctx.stroke();
 
 				if (label != undefined) {
-					x = x1+((x2-x1)/2);
-					y = y1+((y2-y1)/2);
+					x = obj.x1+((obj.x2-obj.x1)/2);
+					y = obj.y1+((obj.y2-obj.y1)/2);
 
-					if (y1 == y2) {
+					if (obj.y1 == obj.y2) {
 						// Horizontal line
 						y = y - 1;
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'bottom';
-					} else if (x1 == x2) {
+					} else if (obj.x1 == obj.x2) {
 						// Vertical line
 						x = x + 2;
 						ctx.textAlign = 'left';
@@ -396,7 +488,7 @@ function BodyLoad() {
 
 					ctx.fillStyle = 'black'
 					ctx.font="bold 14px Arial";
-					ctx.fillText(label,x,y);
+					ctx.fillText(obj.label,x,y);
 				}
 			}
 		},
@@ -404,30 +496,38 @@ function BodyLoad() {
 		// Draw a guide line
 		guide: function(x,y) {
 			actions.update();
-			this.draw(this.lineCoord(this.x),this.lineCoord(this.y),
-				this.lineCoord(x),this.lineCoord(y),'line');
+
+			object = {
+				x1: this.lineCoord(this.x),
+				y1: this.lineCoord(this.y),
+				x2: this.lineCoord(x),
+				y2: this.lineCoord(y),
+				type: 'line',
+				color: 'Black',
+				label: '',
+				sub: '',
+				subpos: 'middle'
+			};
+
+			this.draw(object);
 		},
 
-		// Highlight square
-		highlightSquare: function(x,y) {
+		// Highlight
+		highlight: function(obj) {
       		ctx.lineWidth = 4;
       		ctx.strokeStyle = 'yellow';
 
       		ctx.beginPath();
-      		ctx.rect(x,y,global.spacing,global.spacing);
+
+      		if (obj.type == 'square') {
+      			ctx.rect(obj.x1,obj.y1,global.spacing,global.spacing);
+ 			} else if (obj.type == 'line') {
+				ctx.moveTo(obj.x1,obj.y1);
+				ctx.lineTo(obj.x2,obj.y2);
+				ctx.closePath();
+      		}
+
       		ctx.stroke();
-		},
-
-		// Highlight line
-		highlightLine: function(x1,y1,x2,y2) {
-      		ctx.lineWidth = 4;
-      		ctx.strokeStyle = 'yellow';
-
-			ctx.beginPath();
-			ctx.moveTo(x1,y1);
-			ctx.lineTo(x2,y2);
-			ctx.closePath();
-			ctx.stroke();
 		},
 
 		// Top left corner of square on our graph paper
@@ -452,27 +552,29 @@ function BodyLoad() {
 	canvas.redraw = function() {		
 		this.clear();
 		
-		// Prepare to draw the grid
-		ctx.beginPath();
-		ctx.strokeStyle = 'lightblue';
-		ctx.lineWidth = 1;
+		if (global.drawGraphPaper) {
+			// Prepare to draw the grid
+			ctx.beginPath();
+			ctx.strokeStyle = 'lightblue';
+			ctx.lineWidth = 1;
 
-		// Vertical rule
-		for(var y=global.spacing;y<this.h;y=y+global.spacing) {
-			ctx.moveTo(0,y);
-			ctx.lineTo(this.w,y);
+			// Vertical rule
+			for(var y=global.spacing;y<this.h;y=y+global.spacing) {
+				ctx.moveTo(0,y);
+				ctx.lineTo(this.w,y);
+			}
+
+			// Horizontal rule
+			for(var x=global.spacing;x<this.w;x=x+global.spacing) {
+				ctx.moveTo(x,0);
+				ctx.lineTo(x,this.h);
+			}
+
+			// Draw the grid
+			ctx.closePath();
+			ctx.stroke();
 		}
 
-		// Horizontal rule
-		for(var x=global.spacing;x<this.w;x=x+global.spacing) {
-			ctx.moveTo(x,0);
-			ctx.lineTo(x,this.h);
-		}
-
-		// Draw the grid
-		ctx.closePath();
-		ctx.stroke();
-		
 		// Restore any saved actions
 		actions.restore();
 	}
@@ -483,9 +585,6 @@ function BodyLoad() {
 		
 		var x = e.clientX;
 		var y = e.clientY;
-		
-		// Update the coordinates
-		toolset_coord.update(x,y);
 		
 		// If we're drawing a line, show the guide line
 		if(this.mousedown)
@@ -584,11 +683,6 @@ body {
 	</p>
 
 	<p>
-		<label>Coordinates</label>
-		<span id="coord">0,0</span>
-	</p>
-
-	<p>
 		<label>Color</label>
 		<select id="color" onchange="global.updateColor(this.value)">
 			<option selected>Black</option>
@@ -608,10 +702,33 @@ body {
 	</p>
 
 	<p>
-		<label>Title</label>
-		<textarea id="title" onchange="global.updateTitle(this.value)">
+		<label>Subscript</label>
+		<textarea id="subscript" onchange="global.updateSubscript(this.value)" rows=1
+			cols=12>
 		</textarea>
 	</p>
+
+	<p>
+		<label>Position</label>
+		<select id="subscriptposition" onchange="global.updateSubscriptPosition(this.value)">
+			<option selected>middle</option>
+			<option>top</option>
+			<option>bottom</option>
+		</select>
+	</p>
+
+	<p>
+		<label>Title</label>
+		<textarea id="title" onchange="global.updateTitle(this.value)" rows=1
+			cols=12>
+		</textarea>
+	</p>
+
+	<p>
+		<button onclick="actions.save()">Save</button>
+		<input type="file" id="load" name="files" style="width: 80px;" onchange="actions.load(this.files)"/>
+	</p>
+
 </div>
 
 </body>
