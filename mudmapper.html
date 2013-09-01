@@ -388,7 +388,29 @@ function BodyLoad() {
 				actions.update();
 			};
 			fileReader.readAsText(file);
- 		}
+ 		},
+
+ 		autoSubscript: function() {
+ 			var sorted = global.objects.slice(0);
+
+ 			sorted.sort(function(a,b) {
+  				if (a.y1 < b.y1) return -1;
+  				if (a.y1 > b.y1) return 1;
+  				if (a.x1 < b.x1) return -1;
+  				if (a.x1 > b.x1) return 1;
+  				return 0;
+			});
+
+ 			var subscript = 1;
+ 			for(var i=0;i<sorted.length;i++) {
+				if(sorted[i].type=='square' && sorted[i].color=='Blue') {
+					sorted[i].sub = subscript;
+					subscript++;
+				}
+			}
+
+			this.update();
+		}
 	}
 
 	// Shape drawing functions
@@ -679,7 +701,7 @@ body {
 		<button onclick="actions.undo()">Undo</button>
 		<button onclick="actions.delete()">Delete</button>
 		<button onclick="actions.clear()">Clear</button>
-		<button onclick="actions.png()">Export</button>
+<!--		<button onclick="actions.autoSubscript()">Auto</button> -->
 	</p>
 
 	<p>
@@ -725,6 +747,7 @@ body {
 	</p>
 
 	<p>
+		<button onclick="actions.png()">Export</button>
 		<button onclick="actions.save()">Save</button>
 		<input type="file" id="load" name="files" style="width: 80px;" onchange="actions.load(this.files)"/>
 	</p>
