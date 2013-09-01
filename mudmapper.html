@@ -451,14 +451,8 @@ function BodyLoad() {
 
 		// Draw the specified shape
 		draw: function(obj) {
-			if(obj.color==undefined)
-			{
-				ctx.fillStyle = global.color;
-				ctx.strokeStyle = global.color;
-			} else {
-				ctx.fillStyle = obj.color;
-				ctx.strokeStyle = obj.color;
-			}
+			ctx.fillStyle = obj.color;
+			ctx.strokeStyle = obj.color;
 
 			if (obj.type == 'square') {
 				ctx.fillRect(obj.x1,obj.y1,global.spacing,global.spacing);
@@ -487,7 +481,7 @@ function BodyLoad() {
 				ctx.closePath();
 				ctx.stroke();
 
-				if (label != undefined) {
+				if (obj.label != undefined) {
 					x = obj.x1+((obj.x2-obj.x1)/2);
 					y = obj.y1+((obj.y2-obj.y1)/2);
 
@@ -596,9 +590,6 @@ function BodyLoad() {
 			ctx.closePath();
 			ctx.stroke();
 		}
-
-		// Restore any saved actions
-		actions.restore();
 	}
 
 
