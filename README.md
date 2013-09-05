@@ -12,6 +12,4 @@ interesting rooms/exits.
 
 This is a preliminary version.  All feedback greatly appreciated.  Things I'd
 still like to do:  
-1. Allow for descriptions on rooms/exits that would be included in the image  
-2. Allow for larger graph paper that can be accessed by scrolling  
-3. Mobile/touch screen support  
+1. Mobile/touch screen support  
