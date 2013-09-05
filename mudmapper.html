@@ -43,13 +43,14 @@ function BodyLoad() {
 	// Set some canvas properties
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
-	canvas.w = canvas.width;	// short-hand
-	canvas.h = canvas.height;	// short-hand
 	canvas.mousedown = false;
-		
+	
+	document.getElementById('width').value = canvas.width;
+	document.getElementById('height').value = canvas.height;
+	
 	// Global variables object and associated functions
 	global = {
-		version: 1,
+		version: 3,
 		objects: [], 	
 		spacing: 16,
 		color: 'Black', 
@@ -61,9 +62,11 @@ function BodyLoad() {
 		toJSON: function () {
         	return {
         		version: this.version,
-            	objects: this.objects,
+				width: canvas.width,
+				height: canvas.height,
             	spacing: this.spacing,
-            	title: this.title
+            	title: this.title,
+            	objects: this.objects
         	}
     	},
 
@@ -80,14 +83,23 @@ function BodyLoad() {
 				color: 'Black', // Reset color, label and subscript when adding new object
 				label: '',
 				sub: '',
-				subpos: 'middle'
+				subpos: 'middle',
+				desc1: '',
+				desc2: '',
+				desc3: '',
+				desc4: ''
 			}
 
 			// Update the color and label values
 			document.getElementById('color').value = 'Black';
 			document.getElementById('label').value = '';
+			document.getElementById('desc1').value = '';
+			document.getElementById('desc2').value = '';
+			document.getElementById('desc3').value = '';
+			document.getElementById('desc4').value = '';
 			document.getElementById('subscript').value = '';
 			document.getElementById('subscriptposition').value = 'middle';
+
 			this.color = color;
 
 			actions.update();
@@ -216,6 +228,30 @@ function BodyLoad() {
 			}
 		},
 
+		updateDesc1: function(desc) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].desc1 = desc.trim();
+			}
+		},
+
+		updateDesc2: function(desc) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].desc2 = desc.trim();
+			}
+		},
+
+		updateDesc3: function(desc) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].desc3 = desc.trim();
+			}
+		},
+
+		updateDesc4: function(desc) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].desc4 = desc.trim();
+			}
+		},
+
 		// User updated the subscript on the toolbar.  This is only relevant
 		// if an object is selected.
 		updateSubscript: function(subscript) {
@@ -238,6 +274,18 @@ function BodyLoad() {
 			actions.update();
 		},
 
+		// Update width
+		updateWidth: function(width) {
+			canvas.width = width;
+			actions.update();
+		},
+		
+		// Update width
+		updateHeight: function(height) {
+			canvas.height = height;
+			actions.update();
+		},
+
 		// Select the specified object.  Also update the global color and
 		// label values.
 		selectObject: function(o) {
@@ -246,6 +294,10 @@ function BodyLoad() {
 			this.color = this.objects[o].color;
 			document.getElementById('color').value = this.objects[o].color;
 			document.getElementById('label').value = this.objects[o].label;
+			document.getElementById('desc1').value = this.objects[o].desc1;
+			document.getElementById('desc2').value = this.objects[o].desc2;
+			document.getElementById('desc3').value = this.objects[o].desc3;
+			document.getElementById('desc4').value = this.objects[o].desc4;
 			document.getElementById('subscript').value = this.objects[o].sub;
 			document.getElementById('subscriptposition').value = this.objects[o].subpos;
 
@@ -263,6 +315,9 @@ function BodyLoad() {
 
 		// Redraw all the objects.
 		restore: function() {
+			var room = document.getElementById('room');
+			room.style.display = 'none';
+
 			// Draw lines first
 			for(var i=0;i<global.objects.length;i++) {
 				if(global.objects[i].type=='line') {
@@ -281,12 +336,14 @@ function BodyLoad() {
 					if (i == global.selected) {
 						// Highlight the selected square
 						shape.highlight(global.objects[i]);
+
+						room.style.display = 'block';
 					}
 
 					shape.draw(global.objects[i]);
 				}
 			}
-
+/*
 			// Finally, write the title
 			if (global.title != undefined) {
 				ctx.fillStyle = 'black';
@@ -295,6 +352,7 @@ function BodyLoad() {
 				ctx.font="bold 18px Arial";
 				ctx.fillText(global.title,5,5);
 			}
+*/
 		},
 
 		// Remove the last drawn object
@@ -313,8 +371,8 @@ function BodyLoad() {
 		clear: function() {
 			global.resetObjects();
 /*
-			for(var y=global.spacing;y<canvas.h;y=y+global.spacing*2) {
-				for(var x=global.spacing;x<canvas.w;x=x+global.spacing*2) {
+			for(var y=global.spacing;y<canvas.height;y=y+global.spacing*2) {
+				for(var x=global.spacing;x<canvas.width;x=x+global.spacing*2) {
 					shape.init(x,y);
 					shape.done(x,y);
 				}
@@ -323,31 +381,51 @@ function BodyLoad() {
 			this.update();
 		},
 
-		// Export to PNG
-		png: function() {
-			// Remove the highlighted object first
-			global.selected = -1;
-			global.drawGraphPaper = false;
-			this.update();
+		sortObjects: function() {
+ 			var sorted = global.objects.slice(0);
 
-			window.open(canvas.toDataURL('image/png'), 'Save as PNG');
+ 			sorted.sort(function(a,b) {
+  				if (a.y1 < b.y1) return -1;
+  				if (a.y1 > b.y1) return 1;
+  				if (a.x1 < b.x1) return -1;
+  				if (a.x1 > b.x1) return 1;
+  				return 0;
+			});
 
-			global.drawGraphPaper = true;
+			return sorted;
+		},
+
+ 		autoSubscript: function() {
+ 			var sorted = this.sortObjects();
+
+ 			var subscript = 1;
+ 			for(var i=0;i<sorted.length;i++) {
+				if(sorted[i].type=='square' && sorted[i].desc1!='') {
+					sorted[i].sub = subscript;
+					subscript++;
+				}
+			}
+
 			this.update();
 		},
 
-		// Save the map data to disk (in JSON format)
-		save: function() {
-			var textToWrite = JSON.stringify(global);
-			var textFileAsBlob = new Blob([textToWrite], {type:'text/plain'});
+		shift: function(xoff,yoff) {
+ 			for(var i=0;i<global.objects.length;i++) {
+ 				global.objects[i].x1 = global.objects[i].x1 + xoff*global.spacing;
+				global.objects[i].x2 = global.objects[i].x2 + xoff*global.spacing;
+				global.objects[i].y1 = global.objects[i].y1 + yoff*global.spacing;
+				global.objects[i].y2 = global.objects[i].y2 + yoff*global.spacing;
+			}
+
+			this.update();
+		},
+
+		// Automatically save text file to disk
+		saveFile: function(filename,text) {
+			var textFileAsBlob = new Blob([text], {type:'text/plain'});
 
 			var downloadLink = document.createElement("a");
-
-			if (global.title != undefined && global.title != '') {
-				downloadLink.download = global.title + '.json';
-			} else {
-				downloadLink.download = 'mapper.json';
-			}
+			downloadLink.download = filename;
 
 			downloadLink.innerHTML = "Download File";
 			if (window.webkitURL != null)
@@ -369,6 +447,18 @@ function BodyLoad() {
 			downloadLink.click();
 		},
 
+		// Save the map data to disk (in JSON format)
+		save: function() {
+			var filename = 'mapper.json';
+			if (global.title != undefined && global.title != '') {
+				filename = global.title + '.json';
+			}
+
+			var text = JSON.stringify(global,null,"\t");
+
+			this.saveFile(filename, text);
+		},
+
 		// Load the map from disk
 		load: function(files) {
     		var file = files[0];
@@ -385,32 +475,103 @@ function BodyLoad() {
 				global.title = data.title;
 				document.getElementById('title').value = global.title;
 
+				if (data.version >= 2) {
+					canvas.width = data.width;
+					canvas.height = data.height;
+					document.getElementById('width').value = canvas.width;
+					document.getElementById('height').value = canvas.height;
+				}
+				
+				if (data.version < 3) {
+					for(var i=0;i<global.objects.length;i++) {
+						global.objects[i].desc1 = '';
+						global.objects[i].desc2 = '';
+						global.objects[i].desc3 = '';
+						global.objects[i].desc4 = '';
+					}
+				}
 				actions.update();
 			};
 			fileReader.readAsText(file);
  		},
 
- 		autoSubscript: function() {
- 			var sorted = global.objects.slice(0);
+		// Export to PNG
+		png: function() {
+			// Remove the highlighted object first
+			global.selected = -1;
+			global.drawGraphPaper = false;
+			this.update();
 
- 			sorted.sort(function(a,b) {
-  				if (a.y1 < b.y1) return -1;
-  				if (a.y1 > b.y1) return 1;
-  				if (a.x1 < b.x1) return -1;
-  				if (a.x1 > b.x1) return 1;
-  				return 0;
-			});
+			window.open(canvas.toDataURL('image/png'), 'Save as PNG');
 
- 			var subscript = 1;
+			global.drawGraphPaper = true;
+			this.update();
+		},
+
+		// Export to HTML
+		html: function() {
+			var html = '';
+
+			html += '<!DOCTYPE html>\n';
+			html += '<html>\n';
+			html += '<head>\n';
+			html += '	<style>\n';
+			html += '		* {\n';
+			html += '			padding: 10;\n';
+			html += '			margin: 10;\n';
+			html += '		}\n';
+			html += '		.fit {\n';
+			html += '			max-width: 100%;\n';
+			html += '		}\n';
+			html += '		.center {\n';
+			html += '			display: block;\n';
+			html += '			margin: auto;\n';
+			html += '		}\n';
+			html += '	</style>\n';
+			html += '	<title>' + global.title + '</title>\n';
+			html += '</head>\n';
+			html += '\n';
+			html += '<body>\n';
+
+			var pngfilename = 'mapper.png';
+			var htmlfilename = 'mapper.html';
+
+			if (global.title != undefined && global.title != '') {
+				pngfilename = global.title + '.png';
+				htmlfilename = global.title + '.html';
+			}
+
+			html += '	<a href="' + pngfilename + '"><img id="map" class="center \
+fit" src="' + pngfilename + '"></a>\n';
+			html += '\n';
+			html += '	<table border="1" align="center">\n';
+			html += '		<tr>\n';
+			html += '			<th>No</th>\n';
+			html += '			<th>Area</th>\n';
+			html += '			<th>Enter / Exit</th>\n';
+			html += '			<th>Monster class</th>\n';
+			html += '			<th>Rooms</th>\n';
+			html += '		</tr>\n';
+
+			var sorted = this.sortObjects();
  			for(var i=0;i<sorted.length;i++) {
-				if(sorted[i].type=='square' && sorted[i].color=='Blue') {
-					sorted[i].sub = subscript;
-					subscript++;
+				if(sorted[i].type=='square' && sorted[i].sub!='') {
+					html += '		<tr>\n';
+					html += '			<td>' + sorted[i].sub +   '</td>\n';
+					html += '			<td>' + sorted[i].desc1 + '</td>\n';
+					html += '			<td>' + sorted[i].desc2 + '</td>\n';
+					html += '			<td>' + sorted[i].desc3 + '</td>\n';
+					html += '			<td>' + sorted[i].desc4 + '</td>\n';
+					html += '		</tr>\n';
 				}
 			}
 
-			this.update();
-		}
+			html += '	</table>\n';
+			html += '</body>\n';
+			html += '</html>\n';
+			
+			this.saveFile(htmlfilename, html);
+		},
 	}
 
 	// Shape drawing functions
@@ -575,15 +736,15 @@ function BodyLoad() {
 			ctx.lineWidth = 1;
 
 			// Vertical rule
-			for(var y=global.spacing;y<this.h;y=y+global.spacing) {
+			for(var y=global.spacing;y<this.height;y=y+global.spacing) {
 				ctx.moveTo(0,y);
-				ctx.lineTo(this.w,y);
+				ctx.lineTo(this.width,y);
 			}
 
 			// Horizontal rule
-			for(var x=global.spacing;x<this.w;x=x+global.spacing) {
+			for(var x=global.spacing;x<this.width;x=x+global.spacing) {
 				ctx.moveTo(x,0);
-				ctx.lineTo(x,this.h);
+				ctx.lineTo(x,this.height);
 			}
 
 			// Draw the grid
@@ -593,15 +754,21 @@ function BodyLoad() {
 	}
 
 
+	canvas.getMousePos = function(evt) {
+        var rect = this.getBoundingClientRect();
+        return {
+          x: evt.clientX - rect.left,
+          y: evt.clientY - rect.top
+        };
+    }
+	  
 	canvas.onmousemove = function(e) {
 		if(!e) var e = window.event;
-		
-		var x = e.clientX;
-		var y = e.clientY;
+		var pos = this.getMousePos(e);
 		
 		// If we're drawing a line, show the guide line
 		if(this.mousedown)
-			shape.guide(x,y);
+			shape.guide(pos.x,pos.y);
 	}
 
 
@@ -610,10 +777,9 @@ function BodyLoad() {
 		
 		this.mousedown = true;
 		
-		var x = e.clientX;
-		var y = e.clientY;
+		var pos = this.getMousePos(e);
 
-		shape.init(x,y);
+		shape.init(pos.x,pos.y);
 	}
 
 
@@ -622,10 +788,9 @@ function BodyLoad() {
 
 		this.mousedown = false;
 		
-		var x = e.clientX;
-		var y = e.clientY;
+		var pos = this.getMousePos(e);
 
-		shape.done(x,y);
+		shape.done(pos.x,pos.y);
 	}
 		
 	// Now that all functions and objects are set, draw the grid
@@ -636,14 +801,92 @@ function BodyLoad() {
 <style type="text/css">
 body {
 	margin: 0;
-	overflow: hidden;	// No scrollbars, please
 }
 
 #canvas { z-index: 1; }
 
-#toolset {
+#room {
 	z-index: 2;
-	position: absolute;
+	position: fixed;
+	bottom: 260px;
+	right: 10px;
+	border: 1px solid #000;
+	background-color: #fff;
+	font-family: sans-serif;
+	font-size: 90%;
+	padding: 10px;
+	display: none;
+}
+
+#room p {
+	margin: 0;
+	clear: both;
+	line-height: 2em;
+}
+
+#room p label {
+	font-weight: bold;
+	width: 7em;
+	float: left;
+	display: inline-block;
+}
+
+#room p textarea {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+#room p select {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+#shape {
+	z-index: 3;
+	position: fixed;
+	bottom: 150px;
+	right: 10px;
+	border: 1px solid #000;
+	background-color: #fff;
+	font-family: sans-serif;
+	font-size: 90%;
+	padding: 10px;
+}
+
+#shape p {
+	margin: 0;
+	clear: both;
+	line-height: 2em;
+}
+
+#shape p label {
+	font-weight: bold;
+	width: 7em;
+	float: left;
+	display: inline-block;
+}
+
+#shape p select {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+#shape p textarea {
+	float: left;
+	border: 1px solid #000;
+	color: black;
+	display: inline-block;
+}
+
+#map {
+	z-index: 4;
+	position: fixed;
 	bottom: 10px;
 	right: 10px;
 	border: 1px solid #000;
@@ -653,27 +896,20 @@ body {
 	padding: 10px;
 }
 
-#toolset p {
+#map p {
 	margin: 0;
 	clear: both;
 	line-height: 2em;
 }
 
-#toolset p label {
+#map p label {
 	font-weight: bold;
 	width: 7em;
 	float: left;
 	display: inline-block;
 }
 
-#toolset p select {
-	float: left;
-	border: 1px solid #000;
-	color: black;
-	display: inline-block;
-}
-
-#toolset p textarea {
+#map p textarea {
 	float: left;
 	border: 1px solid #000;
 	color: black;
@@ -687,12 +923,54 @@ body {
 
 <canvas id="canvas"></canvas>
 
-<div id="toolset">
+<div id="room">
+	<p>
+		<label>Desc1</label>
+		<textarea id="desc1" onchange="global.updateDesc1(this.value)" rows=1
+			cols=22>
+		</textarea>
+	</p>
+
+	<p>
+		<label>Desc2</label>
+		<textarea id="desc2" onchange="global.updateDesc2(this.value)" rows=1
+			cols=22>
+		</textarea>
+	</p>
+
+	<p>
+		<label>Desc3</label>
+		<textarea id="desc3" onchange="global.updateDesc3(this.value)" rows=1
+			cols=22>
+		</textarea>
+	</p>
+
+	<p>
+		<label>Desc4</label>
+		<textarea id="desc4" onchange="global.updateDesc4(this.value)" rows=1
+			cols=22>
+		</textarea>
+	</p>
+
+	<p>
+		<label>Subscript</label>
+		<textarea id="subscript" onchange="global.updateSubscript(this.value)" rows=1
+			cols=12>
+		</textarea>
+		<select id="subscriptposition" onchange="global.updateSubscriptPosition(this.value)">
+			<option selected>middle</option>
+			<option>top</option>
+			<option>bottom</option>
+		</select>
+	</p>
+</div>
+
+<div id="shape">
 	<p>
 		<button onclick="actions.undo()">Undo</button>
 		<button onclick="actions.delete()">Delete</button>
 		<button onclick="actions.clear()">Clear</button>
-<!--		<button onclick="actions.autoSubscript()">Auto</button> -->
+		<button onclick="actions.autoSubscript()">Auto</button>
 	</p>
 
 	<p>
@@ -713,36 +991,41 @@ body {
 			cols=12>
 		</textarea>
 	</p>
+</div>
 
-	<p>
-		<label>Subscript</label>
-		<textarea id="subscript" onchange="global.updateSubscript(this.value)" rows=1
-			cols=12>
-		</textarea>
-	</p>
-
-	<p>
-		<label>Position</label>
-		<select id="subscriptposition" onchange="global.updateSubscriptPosition(this.value)">
-			<option selected>middle</option>
-			<option>top</option>
-			<option>bottom</option>
-		</select>
-	</p>
-
+<div id="map">
 	<p>
 		<label>Title</label>
 		<textarea id="title" onchange="global.updateTitle(this.value)" rows=1
-			cols=12>
+			cols=22>
 		</textarea>
 	</p>
 
 	<p>
-		<button onclick="actions.png()">Export</button>
-		<button onclick="actions.save()">Save</button>
-		<input type="file" id="load" name="files" style="width: 80px;" onchange="actions.load(this.files)"/>
+		<label>Canvas</label>
+		<textarea id="width" onchange="global.updateWidth(this.value)" rows=1
+			cols=9>
+		</textarea>
+		<textarea id="height" onchange="global.updateHeight(this.value)" rows=1
+			cols=9>
+		</textarea>
+	</p>
+	
+	<p>
+		<label>Shift</label>
+		<button onclick="actions.shift(-1, 0)">Left</button>
+		<button onclick="actions.shift(1, 0)">Right</button>
+		<button onclick="actions.shift(0, -1)">Up</button>
+		<button onclick="actions.shift(0, 1)">Down</button>
 	</p>
 
+	<p>
+		<label>File</label>
+		<button onclick="actions.save()">Save</button>
+		<input type="file" id="load" name="files" style="width: 82px;" onchange="actions.load(this.files)"/>
+		<button onclick="actions.png()">PNG</button>
+		<button onclick="actions.html()">HTML</button>
+	</p>
 </div>
 
 </body>
