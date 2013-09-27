@@ -622,8 +622,23 @@ function BodyLoad() {
 					str = str.split('[').join('');
 					str = str.split(']').join('');
 					script += '    {' + str.toLowerCase() + '}'
-					script += ' {{forward} {' + sorted[i].directions + '}';
-					script += ' {reverse} {' + sorted[i].reverse + '}}\n';
+					script += ' {' + sorted[i].directions + '}\n';
+				}
+			}
+
+			script += '}\n';
+			
+			script += '#var areasreverse\n'
+			script += '{\n'
+
+			var sorted = this.sortObjects();
+ 			for(var i=0;i<sorted.length;i++) {
+				if(sorted[i].type=='square' && sorted[i].directions!='') {
+					var str = sorted[i].desc1.split('\'').join('');
+					str = str.split('[').join('');
+					str = str.split(']').join('');
+					script += '    {' + str.toLowerCase() + '}'
+					script += ' {' + sorted[i].reverse + '}\n';
 				}
 			}
 
