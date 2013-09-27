@@ -22,6 +22,7 @@ var actions;
 var canvas;
 var ctx;
 var shape;
+var astar;
 
 // Use Debugger.log(string) to print out log messages to console
 var Debugger = function () { };
@@ -50,7 +51,7 @@ function BodyLoad() {
 	
 	// Global variables object and associated functions
 	global = {
-		version: 3,
+		version: 4,
 		objects: [], 	
 		spacing: 16,
 		color: 'Black', 
@@ -73,21 +74,26 @@ function BodyLoad() {
 		// Add a new object (square/line)
 		addObject: function(x1,y1,x2,y2,type) {
 			this.selected = this.objects.length;
-
 			this.objects[this.selected] = {
 				x1: x1,
 				y1: y1,
 				x2: x2,
 				y2: y2,
 				type: type,
-				color: 'Black', // Reset color, label and subscript when adding new object
+				color: 'Black',
 				label: '',
 				sub: '',
 				subpos: 'middle',
 				desc1: '',
 				desc2: '',
 				desc3: '',
-				desc4: ''
+				desc4: '',
+				directions: '',
+				reverse: '',
+			}
+
+			if (type == 'line') {
+				this.checkLine(this.objects[this.selected]);
 			}
 
 			// Update the color and label values
@@ -97,6 +103,7 @@ function BodyLoad() {
 			document.getElementById('desc2').value = '';
 			document.getElementById('desc3').value = '';
 			document.getElementById('desc4').value = '';
+			document.getElementById('directions').value = '';
 			document.getElementById('subscript').value = '';
 			document.getElementById('subscriptposition').value = 'middle';
 
@@ -209,7 +216,25 @@ function BodyLoad() {
  			return Math.sqrt(distSquared);
     	},
 
-    	// User updated the color on the toolbar
+ 		// Select the specified object.
+		selectObject: function(o) {
+			this.selected = o;
+
+			this.color = this.objects[o].color;
+			document.getElementById('color').value = this.objects[o].color;
+			document.getElementById('label').value = this.objects[o].label;
+			document.getElementById('desc1').value = this.objects[o].desc1;
+			document.getElementById('desc2').value = this.objects[o].desc2;
+			document.getElementById('desc3').value = this.objects[o].desc3;
+			document.getElementById('desc4').value = this.objects[o].desc4;
+			document.getElementById('directions').value = this.objects[o].directions;
+			document.getElementById('subscript').value = this.objects[o].sub;
+			document.getElementById('subscriptposition').value = this.objects[o].subpos;
+
+			actions.update();
+		},
+
+   		// User updated the color on the main toolbar.
 		updateColor: function(color) {
 			this.color = color;
 
@@ -219,8 +244,7 @@ function BodyLoad() {
 			}
 		},
 
-		// User updated the label on the toolbar.  This is only relevant if an
-		// object is selected.
+		// User updated the label on the main toolbar.
 		updateLabel: function(label) {
 			if (this.selected >= 0) {
 				this.objects[this.selected].label = label.trim();
@@ -228,6 +252,7 @@ function BodyLoad() {
 			}
 		},
 
+		// User updated descriptions on the room toolbar.
 		updateDesc1: function(desc) {
 			if (this.selected >= 0) {
 				this.objects[this.selected].desc1 = desc.trim();
@@ -252,8 +277,7 @@ function BodyLoad() {
 			}
 		},
 
-		// User updated the subscript on the toolbar.  This is only relevant
-		// if an object is selected.
+		// User updated the subscript on the room toolbar. 
 		updateSubscript: function(subscript) {
 			if (this.selected >= 0) {
 				this.objects[this.selected].sub = subscript.trim();
@@ -268,41 +292,40 @@ function BodyLoad() {
 			}
 		},
 
-		// Update the map title
+		// User updated the title on the map toolbar
 		updateTitle: function(title) {
 			this.title = title.trim();
 			actions.update();
 		},
 
-		// Update width
+		// User updated the canvas width on the map toolbar
 		updateWidth: function(width) {
 			canvas.width = width;
 			actions.update();
 		},
 		
-		// Update width
+		// User updated the canvas height on the map toolbar
 		updateHeight: function(height) {
 			canvas.height = height;
 			actions.update();
 		},
 
-		// Select the specified object.  Also update the global color and
-		// label values.
-		selectObject: function(o) {
-			this.selected = o;
+		// Lines should always be saved left to right (priority 1)
+		// and top to bottom (priority 2)
+		checkLine: function(line) {
+			var x1 = line.x1;
+			var x2 = line.x2;
+			var y1 = line.y1;
+			var y2 = line.y2;
 
-			this.color = this.objects[o].color;
-			document.getElementById('color').value = this.objects[o].color;
-			document.getElementById('label').value = this.objects[o].label;
-			document.getElementById('desc1').value = this.objects[o].desc1;
-			document.getElementById('desc2').value = this.objects[o].desc2;
-			document.getElementById('desc3').value = this.objects[o].desc3;
-			document.getElementById('desc4').value = this.objects[o].desc4;
-			document.getElementById('subscript').value = this.objects[o].sub;
-			document.getElementById('subscriptposition').value = this.objects[o].subpos;
-
-			actions.update();
-		}
+			if (x1 > x2 || (x1 == x2 && y1 > y2))
+			{
+				line.x1 = x2;
+				line.y1 = y2;
+				line.x2 = x1;
+				line.y2 = y1;
+			}
+		},
 	}
 
 	// UI actions
@@ -343,16 +366,6 @@ function BodyLoad() {
 					shape.draw(global.objects[i]);
 				}
 			}
-/*
-			// Finally, write the title
-			if (global.title != undefined) {
-				ctx.fillStyle = 'black';
-				ctx.textAlign = 'left';
-				ctx.textBaseline = 'top';
-				ctx.font="bold 18px Arial";
-				ctx.fillText(global.title,5,5);
-			}
-*/
 		},
 
 		// Remove the last drawn object
@@ -370,14 +383,6 @@ function BodyLoad() {
 		// Clear all the objects
 		clear: function() {
 			global.resetObjects();
-/*
-			for(var y=global.spacing;y<canvas.height;y=y+global.spacing*2) {
-				for(var x=global.spacing;x<canvas.width;x=x+global.spacing*2) {
-					shape.init(x,y);
-					shape.done(x,y);
-				}
-			}
-*/
 			this.update();
 		},
 
@@ -395,14 +400,24 @@ function BodyLoad() {
 			return sorted;
 		},
 
- 		autoSubscript: function() {
- 			var sorted = this.sortObjects();
+ 		autoUpdate: function() {
+			astar.init();
 
+ 			var sorted = this.sortObjects();
  			var subscript = 1;
+
  			for(var i=0;i<sorted.length;i++) {
-				if(sorted[i].type=='square' && sorted[i].desc1!='') {
-					sorted[i].sub = subscript;
-					subscript++;
+				if(sorted[i].type=='square' ) {
+					if (sorted[i].desc1!='') {
+						sorted[i].sub = subscript;
+						subscript++;
+
+						var path = astar.search(sorted[i],false);
+						sorted[i].directions = path.join(";");
+
+						path = astar.search(sorted[i],true);
+						sorted[i].reverse = path.join(";");
+					}
 				}
 			}
 
@@ -490,6 +505,19 @@ function BodyLoad() {
 						global.objects[i].desc4 = '';
 					}
 				}
+
+				if (data.version < 4) {
+					for(var i=0;i<global.objects.length;i++) {
+						global.objects[i].directions = '';
+						global.objects[i].reverse = '';
+
+						if (global.objects[i].type == 'line') {
+							// Lines should always be drawn left to right
+							global.checkLine(global.objects[i]);
+						}
+					}
+				}
+
 				actions.update();
 			};
 			fileReader.readAsText(file);
@@ -510,6 +538,14 @@ function BodyLoad() {
 
 		// Export to HTML
 		html: function() {
+			var pngfilename = 'mapper.png';
+			var htmlfilename = 'mapper.html';
+
+			if (global.title != undefined && global.title != '') {
+				pngfilename = global.title + '.png';
+				htmlfilename = global.title + '.html';
+			}
+
 			var html = '';
 
 			html += '<!DOCTYPE html>\n';
@@ -532,17 +568,8 @@ function BodyLoad() {
 			html += '</head>\n';
 			html += '\n';
 			html += '<body>\n';
-
-			var pngfilename = 'mapper.png';
-			var htmlfilename = 'mapper.html';
-
-			if (global.title != undefined && global.title != '') {
-				pngfilename = global.title + '.png';
-				htmlfilename = global.title + '.html';
-			}
-
-			html += '	<a href="' + pngfilename + '"><img id="map" class="center \
-fit" src="' + pngfilename + '"></a>\n';
+			html += '	<a href="' + pngfilename + '">'
+			html += '<img id="map" class="center fit" src="' + pngfilename + '"></a>\n';
 			html += '\n';
 			html += '	<table border="1" align="center">\n';
 			html += '		<tr>\n';
@@ -551,6 +578,7 @@ fit" src="' + pngfilename + '"></a>\n';
 			html += '			<th>Enter / Exit</th>\n';
 			html += '			<th>Monster class</th>\n';
 			html += '			<th>Rooms</th>\n';
+//			html += '			<th>Directions</th>\n';
 			html += '		</tr>\n';
 
 			var sorted = this.sortObjects();
@@ -562,6 +590,7 @@ fit" src="' + pngfilename + '"></a>\n';
 					html += '			<td>' + sorted[i].desc2 + '</td>\n';
 					html += '			<td>' + sorted[i].desc3 + '</td>\n';
 					html += '			<td>' + sorted[i].desc4 + '</td>\n';
+//					html += '			<td>' + sorted[i].directions + '</td>\n';
 					html += '		</tr>\n';
 				}
 			}
@@ -571,6 +600,36 @@ fit" src="' + pngfilename + '"></a>\n';
 			html += '</html>\n';
 			
 			this.saveFile(htmlfilename, html);
+		},
+
+		// Export speedwalks as tintin++ scripts
+		tintin: function() {
+			var scriptfile = 'mapper.tin';
+
+			if (global.title != undefined && global.title != '') {
+				scriptfile = global.title + '.tin';
+			}
+
+			var script = '';
+			
+			script += '#var areas\n'
+			script += '{\n'
+
+			var sorted = this.sortObjects();
+ 			for(var i=0;i<sorted.length;i++) {
+				if(sorted[i].type=='square' && sorted[i].directions!='') {
+					var str = sorted[i].desc1.split('\'').join('');
+					str = str.split('[').join('');
+					str = str.split(']').join('');
+					script += '    {' + str.toLowerCase() + '}'
+					script += ' {{forward} {' + sorted[i].directions + '}';
+					script += ' {reverse} {' + sorted[i].reverse + '}}\n';
+				}
+			}
+
+			script += '}\n';
+			
+			this.saveFile(scriptfile, script);
 		},
 	}
 
@@ -618,7 +677,7 @@ fit" src="' + pngfilename + '"></a>\n';
 			if (obj.type == 'square') {
 				ctx.fillRect(obj.x1,obj.y1,global.spacing,global.spacing);
 
-				if (label != undefined) {
+				if (obj.label != undefined) {
 					ctx.fillStyle = 'white'
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
@@ -719,7 +778,398 @@ fit" src="' + pngfilename + '"></a>\n';
 			return coord;
 		}
 	}
-	
+
+	// javascript-astar
+	// http://github.com/bgrins/javascript-astar
+	// Freely distributable under the MIT License.
+	// Implements the astar search algorithm in javascript using a binary heap.
+	astar = {
+ 		nodes: {},
+
+    	init: function() {
+    		this.nodes = {};
+
+ 			for(var i=0;i<global.objects.length;i++) {
+				if(global.objects[i].type=='square') {
+					var key = (global.objects[i].x1+global.spacing/2) + '_' + (global.objects[i].y1+global.spacing/2);
+					this.nodes[key] = {
+						obj: global.objects[i],
+						neighbors: [],
+						directions: [],
+                		f: 0,
+                		g: 0,
+                		h: 0,
+                		cost: global.spacing*4,
+                		visited: false,
+                		closed: false,
+                		parent: null,
+                		dir: '',
+                	};
+				}
+			}
+
+ 			// Find Neighbors
+ 			for(var i=0;i<global.objects.length;i++) {
+				if(global.objects[i].type=='line') {
+					var x1 = global.objects[i].x1;
+					var x2 = global.objects[i].x2;
+					var y1 = global.objects[i].y1;
+					var y2 = global.objects[i].y2;
+
+					var xoff = 0;
+					var dir1 = 's';
+					var dir2 = 'n';
+					
+					if (x1 != x2) {
+						xoff = global.spacing;
+
+						if (y1 < y2) {
+							dir1 = 'se';
+							dir2 = 'nw';
+						} else if (y1 == y2) {
+							dir1 = 'e';
+							dir2 = 'w';
+						} else if (y1 > y2) {
+							dir1 = 'ne';
+							dir2 = 'sw';
+						}
+					}
+
+					if (global.objects[i].color != 'Black') {
+						dir1 = '';
+						dir2 = '';
+
+						if (global.objects[i].label != '') {
+							var dirs = global.objects[i].label.split('/');
+							if (dirs.length == 1) {
+								dir1 = dirs[0].trim();
+							} else if (dirs.length == 2) {
+								dir1 = dirs[0].trim();
+								dir2 = dirs[1].trim();
+							}
+						} else if (global.objects[i].color == 'Green') {
+							if (y1 < y2) {
+								dir1 = 'd';
+								dir2 = 'u';
+							} else {
+								dir1 = 'u';
+								dir2 = 'd';
+							}
+						}
+					}
+
+					var yoff = 0;
+					if (y1 < y2) {
+						yoff = global.spacing;
+					} else if (y1 > y2) {
+						yoff = -global.spacing;
+					}
+
+					var sq1 = this.nodes[x1 + '_' + y1];
+					while (x1 != x2 || y1 != y2) {
+						x1 = x1 + xoff;
+						y1 = y1 + yoff;
+
+						var sq2 = this.nodes[x1 + '_' + y1];
+						if (sq2 != undefined)
+						{
+							// Found a line segment
+							this.addNeighbor(sq1, sq2, dir1, dir2);
+							sq1 = sq2;
+						}
+					}
+				}
+			}
+   		},
+
+ 		addNeighbor: function(sq1, sq2, dir1, dir2) {
+			if (sq1 != undefined && sq2 != undefined) {
+				// connecting two rooms
+
+				if (dir1 == '' && dir2 == '') {
+					// See if the room descriptions have enter/exit
+					// commands
+					if (sq1.obj.desc2 != '') {
+						var dirs = sq1.obj.desc2.split('/');
+						if (dirs.length == 1) {
+							dir2 = dirs[0].trim();
+						} else if (dirs.length == 2) {
+							dir1 = dirs[1].trim();
+							dir2 = dirs[0].trim();
+						}
+					} else if (sq2.obj,desc2 != '') {
+						var dirs = sq2.obj.desc2.split('/');
+						if (dirs.length == 1) {
+							dir1 = dirs[0].trim();
+						} else if (dirs.length == 2) {
+							dir1 = dirs[0].trim();
+							dir2 = dirs[1].trim();
+						}	
+					}
+				}
+
+				sq1.neighbors[sq1.neighbors.length] = sq2;
+				sq1.directions[sq1.directions.length] = dir1;
+
+				sq2.neighbors[sq2.neighbors.length] = sq1;
+				sq2.directions[sq2.directions.length] = dir2;
+			}
+
+/*
+			for (var key in nodes) {
+				var node = nodes[key];
+				var exits = '';
+
+				for (var i=0;i<node.directions.length;i++) {
+					if (exits != '') {
+						exits = exits + ', ';
+					}
+
+					exits = exits + node.directions[i];
+				}
+
+				node.obj.exits = exits;
+			}
+*/
+		},
+
+		reset: function() {
+			var start = null;
+
+			for (var key in this.nodes) {
+				var node = this.nodes[key];
+				node.f = 0;
+				node.g = 0;
+				node.h = 0;
+				node.visited = false;
+				node.closed = false;
+				node.parent = null;
+				node.dir = '';
+
+                if (start == null && node.obj.label == '*') {
+                	start = node;
+                }
+			}
+
+			return start;
+		},
+
+   		heap: function() {
+        	return new BinaryHeap(function(node) { 
+            	return node.f; 
+        	});
+    	},
+
+    	search: function(node, reverse) {
+ 			var key = (node.x1+global.spacing/2) + '_' + (node.y1+global.spacing/2);
+
+ 			var end = this.nodes[key];
+
+			if (end.neighbors.length == 0) {
+				// Node isn't connected to anything
+        		return [];
+			}
+
+    		var start = this.reset();
+
+    		if (reverse == true) {
+    			end = start;
+    			start = this.nodes[key];
+    		}
+
+        	var heuristic = astar.manhattan;
+
+       		var openHeap = this.heap();
+        	openHeap.push(start);
+
+        	while(openHeap.size() > 0) {
+
+            	// Grab the lowest f(x) to process next.  Heap keeps this sorted for us.
+            	var currentNode = openHeap.pop();
+
+            	// End case -- result has been found, return the traced path.
+            	if(currentNode === end) {
+                	var curr = currentNode;
+                	var ret = [];
+                	while(curr.parent) {
+                		ret.push(curr.dir);
+                    	curr = curr.parent;
+                	}
+                	return ret.reverse();
+            	}
+
+            	// Normal case -- move currentNode from open to closed, process each of its neighbors.
+            	currentNode.closed = true;
+
+            	for(var i=0, il = currentNode.neighbors.length; i < il; i++) {
+                	var neighbor = currentNode.neighbors[i];
+
+                	if(neighbor.closed || currentNode.directions[i] == '') {
+                    	// Not a valid node to process, skip to next neighbor.
+                    	continue;
+                	}
+
+                	// The g score is the shortest distance from start to current node.
+                	// We need to check if the path we have arrived at this neighbor is the shortest one we have seen yet.
+                	var gScore = currentNode.g + neighbor.cost;
+                	var beenVisited = neighbor.visited;
+
+                	if(!beenVisited || gScore < neighbor.g) {
+
+                    	// Found an optimal (so far) path to this node.  Take score for node to see how good it is.
+                    	neighbor.visited = true;
+                    	neighbor.parent = currentNode;
+                    	neighbor.dir = currentNode.directions[i];
+                    	neighbor.h = neighbor.h || heuristic(neighbor.obj, end.obj);
+                    	neighbor.g = gScore;
+                    	neighbor.f = neighbor.g + neighbor.h;
+
+                    	if (!beenVisited) {
+                        	// Pushing to heap will put it in proper place based on the 'f' value.
+                        	openHeap.push(neighbor);
+                    	}
+                    	else {
+                        	// Already seen the node, but since it has been rescored we need to reorder it in the heap
+                        	openHeap.rescoreElement(neighbor);
+                    	}
+                	}
+            	}
+        	}
+
+        	// No result was found - empty array signifies failure to find path.
+        	return [];
+    	},
+
+    	manhattan: function(pos0, pos1) {
+        	// See list of heuristics: http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+
+        	var d1 = Math.abs (pos1.x1 - pos0.x1);
+        	var d2 = Math.abs (pos1.y1 - pos0.y1);
+        	return d1 + d2;
+    	},
+    }
+
+	function BinaryHeap(scoreFunction){
+    	this.content = [];
+    	this.scoreFunction = scoreFunction;
+	}
+
+	BinaryHeap.prototype = {
+    	push: function(element) {
+        	// Add the new element to the end of the array.
+        	this.content.push(element);
+
+        	// Allow it to sink down.
+        	this.sinkDown(this.content.length - 1);
+    	},
+    	pop: function() {
+        	// Store the first element so we can return it later.
+        	var result = this.content[0];
+        	// Get the element at the end of the array.
+        	var end = this.content.pop();
+        	// If there are any elements left, put the end element at the
+        	// start, and let it bubble up.
+        	if (this.content.length > 0) {
+            	 this.content[0] = end;
+             	this.bubbleUp(0);
+        	}
+        	return result;
+    	},
+    	remove: function(node) {
+        	var i = this.content.indexOf(node);
+    
+        	// When it is found, the process seen in 'pop' is repeated
+        	// to fill up the hole.
+        	var end = this.content.pop();
+
+        	if (i !== this.content.length - 1) {
+            	this.content[i] = end;
+            
+            	if (this.scoreFunction(end) < this.scoreFunction(node)) {
+                	this.sinkDown(i);
+            	}
+            	else {
+                	this.bubbleUp(i);
+            	}
+        	}
+    	},
+    	size: function() {
+        	return this.content.length;
+    	},
+    	rescoreElement: function(node) {
+        	this.sinkDown(this.content.indexOf(node));
+    	},
+    	sinkDown: function(n) {
+        	// Fetch the element that has to be sunk.
+        	var element = this.content[n];
+
+        	// When at 0, an element can not sink any further.
+        	while (n > 0) {
+
+            	// Compute the parent element's index, and fetch it.
+            	var parentN = ((n + 1) >> 1) - 1,
+                	parent = this.content[parentN];
+            	// Swap the elements if the parent is greater.
+            	if (this.scoreFunction(element) < this.scoreFunction(parent)) {
+                	this.content[parentN] = element;
+                	this.content[n] = parent;
+                	// Update 'n' to continue at the new position.
+                	n = parentN;
+            	}
+
+            	// Found a parent that is less, no need to sink any further.
+            	else {
+                	break;
+            	}
+        	}
+    	},
+    	bubbleUp: function(n) {
+        	// Look up the target element and its score.
+        	var length = this.content.length,
+            	element = this.content[n],
+            	elemScore = this.scoreFunction(element);
+        
+        	while(true) {
+            	// Compute the indices of the child elements.
+            	var child2N = (n + 1) << 1, child1N = child2N - 1;
+            	// This is used to store the new position of the element,
+            	// if any.
+            	var swap = null;
+            	// If the first child exists (is inside the array)...
+            	if (child1N < length) {
+            	// Look it up and compute its score.
+            	var child1 = this.content[child1N],
+                	child1Score = this.scoreFunction(child1);
+
+            	// If the score is less than our element's, we need to swap.
+            	if (child1Score < elemScore)
+                	swap = child1N;
+            	}
+
+            	// Do the same checks for the other child.
+            	if (child2N < length) {
+                	var child2 = this.content[child2N],
+                    	child2Score = this.scoreFunction(child2);
+                	if (child2Score < (swap === null ? elemScore : child1Score)) {
+                    	swap = child2N;
+                	}
+            	}
+
+            	// If the element needs to be moved, swap it, and continue.
+            	if (swap !== null) {
+                	this.content[n] = this.content[swap];
+                	this.content[swap] = element;
+                	n = swap;
+            	}
+
+            	// Otherwise, we are done.
+            	else {
+                	break;
+            	}
+        	}
+    	}
+	}
+
 	// Clear out everything
 	canvas.clear = function() {
 		ctx.clearRect(0,0,this.width,this.height);
@@ -808,7 +1258,7 @@ body {
 #room {
 	z-index: 2;
 	position: fixed;
-	bottom: 260px;
+	bottom: 290px;
 	right: 10px;
 	border: 1px solid #000;
 	background-color: #fff;
@@ -848,7 +1298,7 @@ body {
 #shape {
 	z-index: 3;
 	position: fixed;
-	bottom: 150px;
+	bottom: 180px;
 	right: 10px;
 	border: 1px solid #000;
 	background-color: #fff;
@@ -963,6 +1413,13 @@ body {
 			<option>bottom</option>
 		</select>
 	</p>
+
+	<p>
+		<label>Directions</label>
+		<textarea id="directions" rows=1 cols=22 readonly="readonly">
+		</textarea>
+	</p>
+
 </div>
 
 <div id="shape">
@@ -970,7 +1427,7 @@ body {
 		<button onclick="actions.undo()">Undo</button>
 		<button onclick="actions.delete()">Delete</button>
 		<button onclick="actions.clear()">Clear</button>
-		<button onclick="actions.autoSubscript()">Auto</button>
+		<button onclick="actions.autoUpdate()">Auto</button>
 	</p>
 
 	<p>
@@ -1023,8 +1480,13 @@ body {
 		<label>File</label>
 		<button onclick="actions.save()">Save</button>
 		<input type="file" id="load" name="files" style="width: 82px;" onchange="actions.load(this.files)"/>
+	</p>
+
+	<p>
+		<label>Export</label>
 		<button onclick="actions.png()">PNG</button>
 		<button onclick="actions.html()">HTML</button>
+		<button onclick="actions.tintin()">Tintin</button>
 	</p>
 </div>
 
