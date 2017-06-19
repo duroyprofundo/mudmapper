@@ -51,13 +51,14 @@ function BodyLoad() {
 	
 	// Global variables object and associated functions
 	global = {
-		version: 4,
+		version: 5,
 		objects: [], 	
 		spacing: 16,
 		color: 'Black', 
 		title: '',
 		selected: -1,	// currently selected object (-1 = none)
 		drawGraphPaper: true,
+		hidePrivate: false,
 
 		// Only convert the settings we want save to JSON
 		toJSON: function () {
@@ -90,6 +91,7 @@ function BodyLoad() {
 				desc4: '',
 				directions: '',
 				reverse: '',
+				private: false,
 			}
 
 			if (type == 'line') {
@@ -99,6 +101,7 @@ function BodyLoad() {
 			// Update the color and label values
 			document.getElementById('color').value = 'Black';
 			document.getElementById('label').value = '';
+			document.getElementById('private').checked = false;
 			document.getElementById('desc1').value = '';
 			document.getElementById('desc2').value = '';
 			document.getElementById('desc3').value = '';
@@ -223,6 +226,7 @@ function BodyLoad() {
 			this.color = this.objects[o].color;
 			document.getElementById('color').value = this.objects[o].color;
 			document.getElementById('label').value = this.objects[o].label;
+			document.getElementById('private').checked = this.objects[o].private;
 			document.getElementById('desc1').value = this.objects[o].desc1;
 			document.getElementById('desc2').value = this.objects[o].desc2;
 			document.getElementById('desc3').value = this.objects[o].desc3;
@@ -248,6 +252,13 @@ function BodyLoad() {
 		updateLabel: function(label) {
 			if (this.selected >= 0) {
 				this.objects[this.selected].label = label.trim();
+				actions.update();
+			}
+		},
+
+		updatePrivate: function(private) {
+			if (this.selected >= 0) {
+				this.objects[this.selected].private = private;
 				actions.update();
 			}
 		},
@@ -310,6 +321,11 @@ function BodyLoad() {
 			actions.update();
 		},
 
+		updateHidePrivate: function(hidePrivate) {
+			global.hidePrivate = hidePrivate;
+			actions.update();
+		},
+
 		// Lines should always be saved left to right (priority 1)
 		// and top to bottom (priority 2)
 		checkLine: function(line) {
@@ -325,6 +341,14 @@ function BodyLoad() {
 				line.x2 = x1;
 				line.y2 = y1;
 			}
+		},
+
+		validObject: function(obj) {
+			if (global.hidePrivate && obj.private) {
+				return false;
+			}
+
+			return true;
 		},
 	}
 
@@ -343,7 +367,8 @@ function BodyLoad() {
 
 			// Draw lines first
 			for(var i=0;i<global.objects.length;i++) {
-				if(global.objects[i].type=='line') {
+				if(global.objects[i].type=='line' &&
+					global.validObject(global.objects[i])) {
 					if (i == global.selected) {
 						// Highlight the selected line
 						shape.highlight(global.objects[i]);
@@ -355,7 +380,8 @@ function BodyLoad() {
 
 			// Then draw squares
 			for(var i=0;i<global.objects.length;i++) {
-				if(global.objects[i].type=='square') {
+				if(global.objects[i].type=='square' &&
+					global.validObject(global.objects[i])) {
 					if (i == global.selected) {
 						// Highlight the selected square
 						shape.highlight(global.objects[i]);
@@ -408,7 +434,7 @@ function BodyLoad() {
 
  			for(var i=0;i<sorted.length;i++) {
 				if(sorted[i].type=='square' ) {
-					if (sorted[i].desc1!='') {
+					if (global.validObject(sorted[i]) && sorted[i].desc1 != '') {
 						sorted[i].sub = subscript;
 						subscript++;
 
@@ -417,6 +443,8 @@ function BodyLoad() {
 
 						path = astar.search(sorted[i],true);
 						sorted[i].reverse = path.join(";");
+					} else {
+						sorted[i].sub = '';
 					}
 				}
 			}
@@ -497,17 +525,15 @@ function BodyLoad() {
 					document.getElementById('height').value = canvas.height;
 				}
 				
-				if (data.version < 3) {
-					for(var i=0;i<global.objects.length;i++) {
+				for(var i=0;i<global.objects.length;i++) {
+					if (data.version < 3) {
 						global.objects[i].desc1 = '';
 						global.objects[i].desc2 = '';
 						global.objects[i].desc3 = '';
 						global.objects[i].desc4 = '';
 					}
-				}
 
-				if (data.version < 4) {
-					for(var i=0;i<global.objects.length;i++) {
+					if (data.version < 4) {
 						global.objects[i].directions = '';
 						global.objects[i].reverse = '';
 
@@ -516,10 +542,15 @@ function BodyLoad() {
 							global.checkLine(global.objects[i]);
 						}
 					}
+
+					if (data.version < 5) {
+						global.objects[i].private = false;
+					}
 				}
 
 				actions.update();
 			};
+
 			fileReader.readAsText(file);
  		},
 
@@ -577,7 +608,11 @@ function BodyLoad() {
 			html += '			<th>Area</th>\n';
 			html += '			<th>Enter / Exit</th>\n';
 			html += '			<th>Monster class</th>\n';
-			html += '			<th>Rooms</th>\n';
+
+			if (!global.hidePrivate) {
+				html += '			<th>Rooms</th>\n';
+			}
+
 //			html += '			<th>Directions</th>\n';
 			html += '		</tr>\n';
 
@@ -589,7 +624,11 @@ function BodyLoad() {
 					html += '			<td>' + sorted[i].desc1 + '</td>\n';
 					html += '			<td>' + sorted[i].desc2 + '</td>\n';
 					html += '			<td>' + sorted[i].desc3 + '</td>\n';
-					html += '			<td>' + sorted[i].desc4 + '</td>\n';
+
+					if (!global.hidePrivate) {
+						html += '			<td>' + sorted[i].desc4 + '</td>\n';
+					}
+
 //					html += '			<td>' + sorted[i].directions + '</td>\n';
 					html += '		</tr>\n';
 				}
@@ -612,12 +651,13 @@ function BodyLoad() {
 
 			var script = '';
 			
-			script += '#var areas\n'
+			script += '#var realms[' + global.title + '][areas]\n';
 			script += '{\n'
 
 			var sorted = this.sortObjects();
  			for(var i=0;i<sorted.length;i++) {
-				if(sorted[i].type=='square' && sorted[i].directions!='') {
+				if(sorted[i].type=='square' && sorted[i].sub!='' && 
+					sorted[i].directions!='') {
 					var str = sorted[i].desc1.split('\'').join('');
 					str = str.split('[').join('');
 					str = str.split(']').join('');
@@ -628,12 +668,13 @@ function BodyLoad() {
 
 			script += '}\n';
 			
-			script += '#var areasreverse\n'
+			script += '#var realms[' + global.title + '][areasreverse]\n';
 			script += '{\n'
 
 			var sorted = this.sortObjects();
  			for(var i=0;i<sorted.length;i++) {
-				if(sorted[i].type=='square' && sorted[i].directions!='') {
+				if(sorted[i].type=='square' && sorted[i].sub!='' &&
+					sorted[i].directions!='') {
 					var str = sorted[i].desc1.split('\'').join('');
 					str = str.split('[').join('');
 					str = str.split(']').join('');
@@ -1273,7 +1314,7 @@ body {
 #room {
 	z-index: 2;
 	position: fixed;
-	bottom: 290px;
+	bottom: 355px;
 	right: 10px;
 	border: 1px solid #000;
 	background-color: #fff;
@@ -1313,7 +1354,7 @@ body {
 #shape {
 	z-index: 3;
 	position: fixed;
-	bottom: 180px;
+	bottom: 210px;
 	right: 10px;
 	border: 1px solid #000;
 	background-color: #fff;
@@ -1463,6 +1504,11 @@ body {
 			cols=12>
 		</textarea>
 	</p>
+
+	<p>
+		<label>Private</label>
+		<input id="private" type="checkbox" onchange="global.updatePrivate(this.checked)" />
+	</p>
 </div>
 
 <div id="map">
@@ -1489,6 +1535,11 @@ body {
 		<button onclick="actions.shift(1, 0)">Right</button>
 		<button onclick="actions.shift(0, -1)">Up</button>
 		<button onclick="actions.shift(0, 1)">Down</button>
+	</p>
+
+	<p>
+		<label>Hide Private</label>
+		<input id="hideprivate" type="checkbox" onchange="global.updateHidePrivate(this.checked)" />
 	</p>
 
 	<p>
